@@ -110,7 +110,7 @@ module DA_gen(input clk,
             end
         endcase
     end
-    localparam HeaderLength = 14;
+    localparam HeaderLength = 16;
     assign x_addr           = x_addr_cntr+HeaderLength;
     assign y_addr           = y_addr_cntr+HeaderLength+xdata_points_number*2+1;
     assign DA_generating    = !(curr == IDLE);

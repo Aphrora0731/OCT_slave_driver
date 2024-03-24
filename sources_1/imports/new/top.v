@@ -89,6 +89,7 @@ module top(input sys_clk,
     
     
     reg proc_begin;
+    
     wire ram_write_enable;
     wire[7:0]w_data;
     wire[13:0]w_addr;
@@ -127,6 +128,26 @@ module top(input sys_clk,
     end
     
     wire proc_finished;
+    
+    reg[31:0] proc_cntr;
+    always @(posedge sys_clk or negedge sys_rst_n) begin
+        if (!sys_rst_n) begin
+            proc_begin <= 0;
+        end
+        else
+        begin
+            if (uart_recv_done) begin
+                proc_begin <= 1;
+            end
+            else begin
+                //Just to cooperating stupid code formatter.
+            end
+            if (proc_finished)
+            begin
+                proc_begin <= 0;
+            end
+        end
+    end
     write_bram write_data(
     .clk(sys_clk),
     .rst_n(sys_rst_n),
@@ -148,7 +169,7 @@ module top(input sys_clk,
     
     wire[13:0] x_addr,y_addr;
     wire[15:0] x_data,y_data;
-    wire[15:0] xdata_points_number,xdata_block_number,ydata_points_number,cycles_per_points,da_delay_cycles,acq_delay_cycles,ccd_delay_cycles;
+    wire[15:0] xdata_points_number,xdata_block_number,ydata_points_number,cycles_per_points,da_delay_cycles,acq_delay_cycles,ccd_delay_cycles,system_state;
     
     FrameAnalyzer u_FrameAnalyzer(
     .clk(sys_clk),
@@ -158,102 +179,49 @@ module top(input sys_clk,
     .data(frame_data),
     .addr(frame_addr),
     
-    .FRAME_IS_DONE(frame_rdy),
+    .FRAME_IS_DONE(frame_rdy),//If system_state == 2d_scan,tansfer frame_rdy to 2d_scan;else to old generators
     .xdata_points_number(xdata_points_number),
     .xdata_block_number(xdata_block_number),
     .ydata_points_number(ydata_points_number),
     .cycles_per_points(cycles_per_points),
     .da_delay_cycles(da_delay_cycles),
     .acq_delay_cycles(acq_delay_cycles),
-    .ccd_delay_cycles(ccd_delay_cycles)
+    .ccd_delay_cycles(ccd_delay_cycles),
+    .system_state(system_state)
     );
-    
+
     wire[13:0] sg_x_addr, sg_y_addr;
     reg[15:0] sg_x_data, sg_y_data;
-    
-    wire DA_generating,DA_finished,ccd_finished,acq_finished;
-    DA_gen DA_gen(
-    .clk(sys_clk),
-    .rstn(sys_rst_n),
-    .data_rdy(frame_rdy), // Assuming frame_rdy is the signal indicating data readiness for SignalGenerator
+ 
+  wire DA_generating; 
+signal3D_generator signal3D_inst(
+    .sys_clk(sys_clk),
+    .sys_rst_n(sys_rst_n),
+    .frame_rdy(frame_rdy),
     .xdata_points_number(xdata_points_number),
+    .xdata_block_number(xdata_block_number),
     .ydata_points_number(ydata_points_number),
     .cycles_per_points(cycles_per_points),
     .da_delay_cycles(da_delay_cycles),
-    .x_addr(sg_x_addr), // sg_x_addr should be declared as a wire in the top module
-    .x_data(sg_x_data), // sg_x_data should be connected or processed as required
-    .y_addr(sg_y_addr), // sg_y_addr should be declared as a wire in the top module
-    .y_data(sg_y_data), // sg_y_data should be connected or processed as required
-    .dx(DataA),         // sg_dx should be connected or processed as required
-    .dy(DataB),         // sg_dy should be connected or processed as required
-    .DA_generating(DA_generating),
-    .finished(DA_finished)
-    );
-    wire ccd_o;
-    ccd_gen ccd_gen(
-    .clk(sys_clk),
-    .rstn(sys_rst_n),
-    .data_rdy(frame_rdy), // Assuming frame_rdy is the signal indicating data readiness for SignalGenerator
-    .xdata_points_number(xdata_points_number),
-    .xdata_block_number(xdata_block_number),
-    .ydata_points_number(ydata_points_number),
-    .cycles_per_points(cycles_per_points),
-    .ccd_delay_cycles(ccd_delay_cycles),
-    .ccd(ccd_o),
-    .finished(ccd_finished)
-    );
-    //assign sign_ccd = ccd_o;
-    
-
-    OBUFDS #(
-    .IOSTANDARD("DEFAULT"), // Specify the output I/O standard
-    .SLEW("SLOW")           // Specify the output slew rate
-    ) OBUFDS_inst (
-    .O(lvds_ccd_p),     // Diff_p output (connect directly to top-level port)
-    .OB(lvds_ccd_n),   // Diff_n output (connect directly to top-level port)
-    .I(ccd_o)      // Buffer input
-    );
-    
-    acq_gen acq_gen(
-    .clk(sys_clk),
-    .rstn(sys_rst_n),
-    .data_rdy(frame_rdy), // Assuming frame_rdy is the signal indicating data readiness for SignalGenerator
-    .xdata_points_number(xdata_points_number),
-    .xdata_block_number(xdata_block_number),
-    .ydata_points_number(ydata_points_number),
-    .cycles_per_points(cycles_per_points),
     .acq_delay_cycles(acq_delay_cycles),
+    .ccd_delay_cycles(ccd_delay_cycles),
+    .system_state(system_state),
+
+    .sg_x_addr(sg_x_addr),
+    .sg_y_addr(sg_y_addr),
+    .sg_x_data(sg_x_data),
+    .sg_y_data(sg_y_data),
+    .DA_generating(DA_generating),
+    .DataA(DataA),
+    .DataB(DataB),
+    .lvds_ccd_p(lvds_ccd_p),
+    .lvds_ccd_n(lvds_ccd_n),
     .acq(acq),
-    .finished(acq_finished)
-    );
-    reg[31:0] proc_cntr;
-    always @(posedge sys_clk or negedge sys_rst_n) begin
-        if (!sys_rst_n) begin
-            proc_begin <= 0;
-        end
-        else
-        begin
-            if (uart_recv_done) begin
-                proc_begin <= 1;
-            end
-            else begin
-                //Just to cooperating stupid code formatter.
-            end
-            if (proc_finished)
-            begin
-                proc_begin <= 0;
-            end
-        end
-    end
-    counter_start proc_end(
-    .clk(sys_clk),
-    .rstn(sys_rst_n),
-    .impulse_1(DA_finished),
-    .impulse_2(acq_finished),
-    .impulse_3(ccd_finished),
-    .counted(proc_finished)
-    );
-    
+    .proc_finished(proc_finished)
+);
+
+   
+
     reg[13:0] addra,addrb;
     wire[15:0] douta,doutb;
     

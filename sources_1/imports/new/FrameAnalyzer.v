@@ -35,8 +35,9 @@ module FrameAnalyzer(input clk,
                      output reg[15:0] cycles_per_points,
                      output reg[15:0] da_delay_cycles,
                      output reg[15:0] acq_delay_cycles,
-                     output reg[15:0] ccd_delay_cycles
-); 
+                     output reg[15:0] ccd_delay_cycles,
+                     output reg[15:0] system_state);
+    
     wire is_start;
     reg data_rdy_d0,data_rdy_d1;
     assign is_start = data_rdy_d0 & (~data_rdy_d1);
@@ -52,16 +53,17 @@ module FrameAnalyzer(input clk,
     end
     
     reg [4:0] curr,next;  // State variable to manage the read process
-    localparam IDLE              = 4'd0;
-    localparam waitCycles        = 4'd1;
-    localparam xDataPointsNumber = 4'd2;
-    localparam xDataBlockNumber  = 4'd3;
-    localparam yDataPointsNumber = 4'd4;
-    localparam CyclesPerPoints   = 4'd5;
-    localparam DADelayCycles     = 4'd6;
-    localparam AcqDelayCycles    = 4'd7;
-    localparam CcdDelayCycles    = 4'd8;
-    localparam DONE              = 4'd10;
+    localparam IDLE               = 4'd0;
+    localparam waitCycles         = 4'd1;
+    localparam xDataPointsNumber  = 4'd2;
+    localparam xDataBlockNumber   = 4'd3;
+    localparam yDataPointsNumber  = 4'd4;
+    localparam CyclesPerPoints    = 4'd5;
+    localparam DADelayCycles      = 4'd6;
+    localparam AcqDelayCycles     = 4'd7;
+    localparam CcdDelayCycles     = 4'd8;
+    localparam SysStateDescriptor = 4'd9;
+    localparam DONE               = 4'd15;
     reg read_enable;  // Flag to enable reading from BRAM
     reg[31:0] waiting_cntr;
     reg waited;
@@ -80,16 +82,17 @@ module FrameAnalyzer(input clk,
     //State Jump Table
     always @(*)begin
         case (curr)
-            IDLE:next              = is_start?waitCycles:IDLE;
-            waitCycles:next        = waited?xDataPointsNumber:waitCycles;
-            xDataPointsNumber:next = xDataBlockNumber;
-            xDataBlockNumber:next  = yDataPointsNumber;
-            yDataPointsNumber:next = CyclesPerPoints;
-            CyclesPerPoints:next   = DADelayCycles;
-            DADelayCycles:next     = AcqDelayCycles;
-            AcqDelayCycles:next    = CcdDelayCycles;
-            CcdDelayCycles:next    = DONE;
-            DONE:next              = IDLE;
+            IDLE:next               = is_start?waitCycles:IDLE;
+            waitCycles:next         = waited?xDataPointsNumber:waitCycles;
+            xDataPointsNumber:next  = xDataBlockNumber;
+            xDataBlockNumber:next   = yDataPointsNumber;
+            yDataPointsNumber:next  = CyclesPerPoints;
+            CyclesPerPoints:next    = DADelayCycles;
+            DADelayCycles:next      = AcqDelayCycles;
+            AcqDelayCycles:next     = CcdDelayCycles;
+            CcdDelayCycles:next     = SysStateDescriptor;
+            SysStateDescriptor:next = DONE;
+            DONE:next               = IDLE;
         endcase
     end
     
@@ -137,7 +140,7 @@ module FrameAnalyzer(input clk,
             end
             DADelayCycles:
             begin
-                addr            <= addr;
+                addr            <= addr+2;
                 da_delay_cycles <= data;
             end
             AcqDelayCycles:
@@ -149,6 +152,11 @@ module FrameAnalyzer(input clk,
             begin
                 addr             <= addr;
                 ccd_delay_cycles <= data;
+            end
+            SysStateDescriptor:
+            begin
+                addr         <= addr;
+                system_state <= data;
             end
             DONE:
             begin
