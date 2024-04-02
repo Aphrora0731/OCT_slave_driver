@@ -1,28 +1,27 @@
 `timescale 1ns / 1ps
 //////////////////////////////////////////////////////////////////////////////////
-// Company:
-// Engineer:
-//
-// Create Date: 2024/03/24 17:55:28
-// Design Name:
-// Module Name: signal3D_generator
-// Project Name:
-// Target Devices:
-// Tool Versions:
-// Description:
-//
-// Dependencies:
-//
+// Company: 
+// Engineer: 
+// 
+// Create Date: 2024/03/25 12:23:40
+// Design Name: 
+// Module Name: signal2D_generator
+// Project Name: 
+// Target Devices: 
+// Tool Versions: 
+// Description: 
+// 
+// Dependencies: 
+// 
 // Revision:
 // Revision 0.01 - File Created
 // Additional Comments:
-//
+// 
 //////////////////////////////////////////////////////////////////////////////////
-
-
-module signal3D_generator(input sys_clk,
+module signal2D_generator(input sys_clk,
                           input sys_rst_n,
                           input frame_rdy,
+                          input KILL_PROCESS,
                           input [15:0]xdata_points_number,
                           input [15:0]xdata_block_number,
                           input [15:0]ydata_points_number,
@@ -42,13 +41,14 @@ module signal3D_generator(input sys_clk,
                           output lvds_ccd_n,
                           output acq,
                           output proc_finished);
-    wire frame3d_rdy;
-    localparam scan3d = 3;
-    assign frame3d_rdy = system_state==scan3d?frame_rdy:0; 
-    DA_gen DA_gen(
+    wire frame2d_rdy;
+    localparam scan2d = 2;
+    assign frame2d_rdy = system_state==scan2d?frame_rdy:0; 
+    DA_2Dgen DA_gen(
     .clk(sys_clk),
     .rstn(sys_rst_n),
-    .data_rdy(frame3d_rdy), // Assuming frame3d_rdy is the signal indicating data readiness for SignalGenerator
+    .data_rdy(frame2d_rdy), // Assuming frame3d_rdy is the signal indicating data readiness for SignalGenerator
+    .KILL_PROCESS(KILL_PROCESS),
     .xdata_points_number(xdata_points_number),
     .ydata_points_number(ydata_points_number),
     .cycles_per_points(cycles_per_points),
@@ -63,10 +63,11 @@ module signal3D_generator(input sys_clk,
     .finished(DA_finished)
     );
     wire ccd_o;
-    ccd_gen ccd_gen(
+    ccd_2Dgen ccd_gen(
     .clk(sys_clk),
     .rstn(sys_rst_n),
-    .data_rdy(frame3d_rdy), // Assuming frame3d_rdy is the signal indicating data readiness for SignalGenerator
+    .data_rdy(frame2d_rdy), // Assuming frame2d_rdy is the signal indicating data readiness for SignalGenerator
+    .KILL_PROCESS(KILL_PROCESS),
     .xdata_points_number(xdata_points_number),
     .xdata_block_number(xdata_block_number),
     .ydata_points_number(ydata_points_number),
@@ -86,10 +87,11 @@ module signal3D_generator(input sys_clk,
     .I(ccd_o)      // Buffer input
     );
     
-    acq_gen acq_gen(
+    acq_2Dgen acq_gen(
     .clk(sys_clk),
     .rstn(sys_rst_n),
-    .data_rdy(frame3d_rdy), // Assuming frame3d_rdy is the signal indicating data readiness for SignalGenerator
+    .data_rdy(frame2d_rdy), // Assuming frame2d_rdy is the signal indicating data readiness for SignalGenerator
+    .KILL_PROCESS(KILL_PROCESS),
     .xdata_points_number(xdata_points_number),
     .xdata_block_number(xdata_block_number),
     .ydata_points_number(ydata_points_number),

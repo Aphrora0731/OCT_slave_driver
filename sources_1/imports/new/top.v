@@ -23,12 +23,12 @@ module top(input sys_clk,
            output ClkB,
            output WRTA,
            output WRTB,
-           output [13:0]DataA,
-           output [13:0]DataB,
+           output reg[13:0]DataA,
+           output reg[13:0]DataB,
           // output sign_ccd,
-           output lvds_ccd_p,
-           output lvds_ccd_n,
-           output acq);
+           output reg lvds_ccd_p,
+           output reg lvds_ccd_n,
+           output reg acq);
     assign ClkA       = sys_clk;
     assign ClkB       = sys_clk;
     assign WRTA = sys_clk;
@@ -106,6 +106,7 @@ module top(input sys_clk,
             if (uart_recv_done)
             begin
                 w_finish_cntr <= 0;
+                w_finished<=0;
             end
             else begin
                 if (proc_begin)
@@ -127,7 +128,9 @@ module top(input sys_clk,
         end
     end
     
-    wire proc_finished;
+    wire proc_finished,scan3d_finished,scan2d_finished;
+    assign proc_finished = scan2d_finished | scan2d_finished;
+
     
     reg[31:0] proc_cntr;
     always @(posedge sys_clk or negedge sys_rst_n) begin
@@ -190,10 +193,10 @@ module top(input sys_clk,
     .system_state(system_state)
     );
 
-    wire[13:0] sg_x_addr, sg_y_addr;
-    reg[15:0] sg_x_data, sg_y_data;
- 
-  wire DA_generating; 
+    wire[13:0] sg2d_x_addr, sg2d_y_addr,sg3d_x_addr,sg3d_y_addr;
+    reg[15:0] sg2d_x_data, sg2d_y_data,sg3d_x_data,sg3d_y_data;
+    wire[13:0] DataA2d,DataA3d,DataB2d,DataB3d;
+  wire DA3d_generating,DA2d_generating; 
 signal3D_generator signal3D_inst(
     .sys_clk(sys_clk),
     .sys_rst_n(sys_rst_n),
@@ -207,17 +210,44 @@ signal3D_generator signal3D_inst(
     .ccd_delay_cycles(ccd_delay_cycles),
     .system_state(system_state),
 
-    .sg_x_addr(sg_x_addr),
-    .sg_y_addr(sg_y_addr),
-    .sg_x_data(sg_x_data),
-    .sg_y_data(sg_y_data),
-    .DA_generating(DA_generating),
-    .DataA(DataA),
-    .DataB(DataB),
-    .lvds_ccd_p(lvds_ccd_p),
-    .lvds_ccd_n(lvds_ccd_n),
-    .acq(acq),
-    .proc_finished(proc_finished)
+    .sg_x_addr(sg3d_x_addr),
+    .sg_y_addr(sg3d_y_addr),
+    .sg_x_data(sg3d_x_data),
+    .sg_y_data(sg3d_y_data),
+    .DA_generating(DA3d_generating),
+    .DataA(DataA3d),
+    .DataB(DataB3d),
+    .lvds_ccd_p(lvds_ccd_p3d),
+    .lvds_ccd_n(lvds_ccd_n3d),
+    .acq(acq3d),
+    .proc_finished(scan3d_finished)
+);
+
+signal2D_generator signal2D_inst(
+    .sys_clk(sys_clk),
+    .sys_rst_n(sys_rst_n),
+    .frame_rdy(frame_rdy),
+    .KILL_PROCESS(uart_recv_done),
+    .xdata_points_number(xdata_points_number),
+    .xdata_block_number(xdata_block_number),
+    .ydata_points_number(ydata_points_number),
+    .cycles_per_points(cycles_per_points),
+    .da_delay_cycles(da_delay_cycles),
+    .acq_delay_cycles(acq_delay_cycles),
+    .ccd_delay_cycles(ccd_delay_cycles),
+    .system_state(system_state),
+
+    .sg_x_addr(sg2d_x_addr),
+    .sg_y_addr(sg2d_y_addr),
+    .sg_x_data(sg2d_x_data),
+    .sg_y_data(sg2d_y_data),
+    .DA_generating(DA2d_generating),
+    .DataA(DataA2d),
+    .DataB(DataB2d),
+    .lvds_ccd_p(lvds_ccd_p2d),
+    .lvds_ccd_n(lvds_ccd_n2d),
+    .acq(acq2d),
+    .proc_finished(scan2d_finished)
 );
 
    
@@ -230,19 +260,41 @@ signal3D_generator signal3D_inst(
         if (!w_finished) begin
             addra = w_addr; // Accepting serial data from PC
         end
-        else if (DA_generating) begin
-            addra = sg_x_addr; // Controlling devices
+        else if (DA3d_generating) begin
+            addra = sg3d_x_addr; // Controlling devices
+            addrb = sg3d_y_addr;
+            acq = acq3d;
+            lvds_ccd_n = lvds_ccd_n3d;
+            lvds_ccd_p = lvds_ccd_p3d;
+            DataA = DataA3d;
+            DataB = DataB3d;
+        end
+        else if(DA2d_generating) begin
+            addra = sg2d_x_addr;
+            addrb = sg2d_y_addr;
+            DataA = DataA2d;
+            DataB = DataB2d;
+            acq = acq2d;
+            lvds_ccd_n = lvds_ccd_n2d;
+            lvds_ccd_p = lvds_ccd_p2d;
+
         end
         else begin
             addra = frame_addr; // Analyzing data frame
         end
     end
     always @(posedge sys_clk) begin
-        if (DA_generating) begin
+        if (DA3d_generating) begin
             // Route douta to sg_x_data when DA_generating is high
-            sg_x_data <= douta;
-            sg_y_data <= doutb;
-            end else begin
+            sg3d_x_data <= douta;
+            sg3d_y_data <= doutb;
+            end 
+            else if(DA2d_generating)
+            begin
+                sg2d_x_data<=douta;
+                sg2d_y_data<=doutb;
+            end else
+            begin
             // Route douta to frame_data when DA_generating is low
             frame_data <= douta;
         end
@@ -258,7 +310,7 @@ signal3D_generator signal3D_inst(
     
     .clkb(sys_clk),    // input wire clkb
     .web(0),
-    .addrb(sg_y_addr),  // input wire [12 : 0] addrb
+    .addrb(addrb),  // input wire [12 : 0] addrb
     .doutb(doutb)  // output wire [15 : 0] doutb
     );
     

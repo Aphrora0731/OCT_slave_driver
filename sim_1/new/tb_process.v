@@ -95,11 +95,12 @@ module tb_process();
         end
 
         // Call the task
-    for (i = 0; i< 1; i=i + 1) begin
+    for (i = 0; i< 3; i=i + 1) begin
         $fseek(file, 0, 0); // Reset file pointer to beginning
         generate_byte_flow(file);
-        #6000000; // Wait time between repetitions, adjust as needed
+        #10000000; // Wait time between repetitions, adjust as needed
     end
+    //uart_write_byte(8'h55);
         // Close the file
         $fclose(file);
         #60000
